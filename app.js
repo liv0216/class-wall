@@ -50,21 +50,26 @@ let currentUser = null;
 // 사용자 역할(teacher / student) 관리
 // ===================================================
 
-// 교사(teacher)로 지정할 UID 목록
-// 본인의 Firebase UID를 이 배열에 넣으면 교사 권한이 부여됩니다.
+// 교사(teacher)로 지정할 이메일 및 UID 목록
+const TEACHER_EMAILS = [
+  "liv0216@gmail.com"
+];
+
 const TEACHER_UIDS = [
-  // 예: "본인의_UID_여기에_붙여넣기"
+  // 추가 교사 UID가 필요하면 여기에 등록합니다.
 ];
 
 // 현재 사용자의 역할을 반환합니다 ("teacher" 또는 "student")
 function getUserRole(user) {
   if (!user) return null;
-  // 1) TEACHER_UIDS 목록에 포함되어 있거나
+  // 1) TEACHER_EMAILS 또는 TEACHER_UIDS 목록에 포함되어 있거나
   // 2) 로컬 스토리지에 교사 권한이 설정되어 있는 경우
-  if (TEACHER_UIDS.includes(user.uid) || localStorage.getItem("role_" + user.uid) === "teacher") {
-    return "teacher";
-  }
-  return "student";
+  const isTeacher =
+    (user.email && TEACHER_EMAILS.includes(user.email)) ||
+    TEACHER_UIDS.includes(user.uid) ||
+    localStorage.getItem("role_" + user.uid) === "teacher";
+
+  return isTeacher ? "teacher" : "student";
 }
 
 

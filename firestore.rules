@@ -4,12 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // [교사(teacher) 확인 함수]
-    // 1) 아래 배열에 선생님의 Firebase UID를 입력하거나
-    // 2) users 컬렉션에 role이 'teacher'로 등록된 경우 교사 권한을 부여합니다.
+    // 1) 선생님 구글 계정(liv0216@gmail.com)이거나
+    // 2) 교사 UID 목록에 포함되어 있거나
+    // 3) users 컬렉션에 role이 'teacher'로 등록된 경우
     function isTeacher() {
       return request.auth != null && (
-        request.auth.uid in [
-          'TEACHER_UID_HERE' // 👈 [내 UID 복사] 버튼으로 복사한 본인 UID를 여기에 붙여넣으세요.
+        request.auth.token.email == 'liv0216@gmail.com'
+        || request.auth.uid in [
+          'TEACHER_UID_HERE'
         ]
         || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
@@ -26,7 +28,7 @@ service cloud.firestore {
       allow read: if true;
 
       // 2. [생성]
-      // - 교사: 언제든 메모 생성 가능
+      // - 교사: 모든 메모 생성 가능
       // - 학생: 오직 본인의 UID로만 생성 가능 (5글자 이상 필수)
       allow create: if request.auth != null
                     && request.resource.data.text is string
