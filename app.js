@@ -96,30 +96,47 @@ async function loadBoards() {
       list.push({ id: docSnap.id, ...docSnap.data() });
     });
 
-    // 기본 보드가 없으면 기본 보드를 생성합니다.
+    // 기본 보드가 없으면 기본 보드를 준비합니다.
     let defaultBoard = list.find(b => b.id === "default");
     if (!defaultBoard) {
       const defaultData = {
         title: "기본 담벼락",
         description: "우리 반 공통 이야기 공간",
         isLocked: false,
-        createdAt: Date.now()
+        createdAt: 1757030400000
       };
-      await setDoc(doc(db, "boards", "default"), defaultData);
+      const role = currentUser ? getUserRole(currentUser) : null;
+      if (role === "teacher") {
+        try {
+          await setDoc(doc(db, "boards", "default"), defaultData);
+        } catch (e) {
+          console.warn("기본 보드 생성 건너뜀:", e);
+        }
+      }
       defaultBoard = { id: "default", ...defaultData };
       list.unshift(defaultBoard);
     }
 
     boardsList = list;
-    currentBoard = boardsList.find(b => b.id === currentBoardId) || boardsList[0];
+    currentBoard = boardsList.find(b => b.id === currentBoardId) || boardsList[0] || defaultBoard;
     currentBoardId = currentBoard.id;
     localStorage.setItem("current_board_id", currentBoardId);
 
     updateBoardHeaderUI();
     return boardsList;
   } catch (err) {
-    console.error("보드 목록 로드 실패:", err);
-    return [];
+    console.error("보드 목록 로드 실패 (기본 보드로 복구):", err);
+    const fallbackBoard = {
+      id: "default",
+      title: "기본 담벼락",
+      description: "우리 반 공통 이야기 공간",
+      isLocked: false
+    };
+    boardsList = [fallbackBoard];
+    currentBoard = fallbackBoard;
+    currentBoardId = "default";
+    updateBoardHeaderUI();
+    return boardsList;
   }
 }
 
