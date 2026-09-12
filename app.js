@@ -55,8 +55,13 @@ async function loadMemos() {
 }
 
 // 메모를 새로 씁니다.
-// Firestore의 memos 컬렉션에 새 문서를 추가합니다.
+// Firestore의 memos 컬렉션에 새 문서를 추가합니다 (5글자 이상일 때만 저장).
 async function addMemo(text) {
+  if (text.length < 5) {
+    alert("메모는 5글자 이상 입력해 주세요.");
+    return;
+  }
+
   await addDoc(collection(db, "memos"), {
     text: text,
     createdAt: Date.now()
@@ -118,6 +123,12 @@ input.addEventListener("keydown", async function (e) {
 
     const text = input.value.trim();
     if (text === "") return;
+
+    // 5글자 미만이면 저장을 막고 안내합니다.
+    if (text.length < 5) {
+      alert("메모는 5글자 이상 입력해 주세요.");
+      return;
+    }
 
     await addMemo(text);
     input.value = "";
