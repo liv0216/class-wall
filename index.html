@@ -10,8 +10,10 @@
     h1 { font-size: 24px; }
     .notice { background: #ffe9e9; padding: 10px; }
 
-    /* 로그인 버튼이 들어올 자리 */
-    #userArea { margin: 10px 0; color: #666; }
+    /* 로그인 버튼과 상태가 표시되는 자리 */
+    #userArea { margin: 12px 0; color: #333; font-size: 15px; }
+    #userArea button { padding: 6px 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; }
+    #userArea button:hover { background: #f0f0f0; }
 
     /* 메모 쓰는 칸 */
     #writer { margin: 16px 0; }
@@ -28,8 +30,8 @@
   <h1>우리 반 담벼락</h1>
 
 
-  <!-- 백엔드 2 시간에 여기에 로그인 버튼과 내 이름이 들어옵니다 -->
-  <div id="userArea">아직 로그인 기능이 없습니다.</div>
+  <!-- 로그인 버튼과 사용자 상태가 들어오는 자리 -->
+  <div id="userArea">로그인 확인 중...</div>
 
   <div id="writer">
     <textarea id="input" rows="3" placeholder="메모를 쓰고 엔터"></textarea>
