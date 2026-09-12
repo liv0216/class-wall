@@ -335,10 +335,24 @@ async function render() {
   });
 }
 
-// 메모 한 장 만들기
+// 메모 한 장 만들기 (다양한 파스텔 색상과 모양 디자인 적용)
 function makeMemo(memo) {
   const div = document.createElement("div");
-  div.className = "memo";
+  
+  // 파스텔 색상 6가지와 다양한 모양 5가지
+  const colors = ["color-yellow", "color-pink", "color-mint", "color-blue", "color-purple", "color-peach"];
+  const shapes = ["shape-tape", "shape-pin", "shape-heart", "shape-clip", "shape-jelly"];
+
+  // 메모 ID나 내용을 기반으로 일관된 색상/모양 선택
+  let hash = 0;
+  const seed = String(memo.id || memo.text);
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
+  }
+  const colorClass = colors[hash % colors.length];
+  const shapeClass = shapes[(hash >> 2) % shapes.length];
+
+  div.className = `memo ${colorClass} ${shapeClass}`;
 
   const role = currentUser ? getUserRole(currentUser) : null;
   const isTeacher = role === "teacher";
@@ -364,27 +378,29 @@ function makeMemo(memo) {
     div.appendChild(del);
   }
 
-  const span = document.createElement("span");
-  span.textContent = memo.text;
-  div.appendChild(span);
+  // 귀여운 손글씨 폰트 메모 본문
+  const textDiv = document.createElement("div");
+  textDiv.className = "memo-text";
+  textDiv.textContent = memo.text;
+  div.appendChild(textDiv);
 
   // 작성자 및 역할 표기
   if (memo.author) {
-    const authorSpan = document.createElement("div");
+    const authorDiv = document.createElement("div");
+    authorDiv.className = "memo-author";
     const isMemoTeacher = memo.role === "teacher";
-    authorSpan.innerHTML = `${memo.author} ${isMemoTeacher ? '<span style="color:#0d47a1; font-weight:bold;">[선생님]</span>' : ''}`;
-    authorSpan.style.fontSize = "12px";
-    authorSpan.style.color = "#777";
-    authorSpan.style.marginTop = "8px";
-    authorSpan.style.textAlign = "right";
-    div.appendChild(authorSpan);
+    authorDiv.innerHTML = `${memo.author} ${isMemoTeacher ? '<span style="color:#1971c2; font-weight:bold; background:#e7f5ff; padding:1px 6px; border-radius:10px;">선생님 🌟</span>' : ''}`;
+    div.appendChild(authorDiv);
   }
 
   // AI 코멘트가 있는 경우 말풍선 표시
   if (memo.aiComment) {
     const aiCommentBox = document.createElement("div");
     aiCommentBox.className = "ai-comment";
-    aiCommentBox.innerHTML = `<div class="ai-comment-title">🤖 AI 선생님 코멘트</div><div>${memo.aiComment}</div>`;
+    aiCommentBox.innerHTML = `
+      <div class="ai-comment-title">🤖 AI 선생님 한마디 ✨</div>
+      <div class="ai-comment-content">${memo.aiComment}</div>
+    `;
     div.appendChild(aiCommentBox);
   }
 
@@ -392,7 +408,7 @@ function makeMemo(memo) {
   if (isTeacher) {
     const aiBtn = document.createElement("button");
     aiBtn.className = "ai-btn";
-    aiBtn.textContent = memo.aiComment ? "🤖 AI 코멘트 다시 달기" : "🤖 AI 코멘트 달기";
+    aiBtn.textContent = memo.aiComment ? "🤖 코멘트 다시 달기" : "🤖 AI 코멘트 달기";
     aiBtn.addEventListener("click", async function () {
       await generateAiComment(memo, aiBtn);
     });
