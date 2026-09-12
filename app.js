@@ -14,6 +14,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   getDocs,
   query,
@@ -124,6 +125,112 @@ async function deleteMemo(id) {
 
 
 // ===================================================
+// AI 코멘트 생성 기능 (Gemini API 연동)
+// 교사가 버튼을 클릭하면 Vercel 서버리스 함수(/api/gemini)를 호출합니다.
+// ===================================================
+
+// 특정 메모 1개에 대해 AI 코멘트 생성
+async function generateAiComment(memo, buttonElement) {
+  const originalBtnText = buttonElement ? buttonElement.textContent : "";
+  if (buttonElement) {
+    buttonElement.disabled = true;
+    buttonElement.textContent = "🤖 AI 코멘트 작성 중...";
+  }
+
+  try {
+    let response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: memo.text })
+    });
+
+    // 로컬 Live Server 환경(Vercel 서버리스 /api/gemini 가 로컬에 없는 경우) fallback
+    if (!response.ok && response.status === 404) {
+      let localKey = localStorage.getItem("local_gemini_api_key");
+      if (!localKey) {
+        localKey = prompt(
+          "현재 로컬(Live Server) 환경이라 Vercel 서버리스 함수(/api/gemini)가 동작하지 않습니다.\n로컬에서 바로 테스트하려면 무료 Gemini API 키를 입력해 주세요.\n(Vercel에 배포된 환경에서는 설정된 환경 변수로 자동 동작합니다):"
+        );
+        if (localKey && localKey.trim()) {
+          localStorage.setItem("local_gemini_api_key", localKey.trim());
+          localKey = localKey.trim();
+        }
+      }
+
+      if (localKey) {
+        const model = "gemini-3.6-flash";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${localKey}`;
+        const promptText = `당신은 학생들을 따뜻하게 응원하는 친절한 초·중등학교 선생님입니다. 학생의 메모를 읽고 칭찬, 격려 또는 생각을 북돋워 주는 짧고 다정한 코멘트를 한국어로 1~2문장으로 작성해 주세요. 어울리는 이모지도 1~2개 포함해 주세요.\n\n[학생 메모]\n${memo.text}`;
+
+        const directRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }]
+          })
+        });
+
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          const comment = directData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (comment) {
+            await updateDoc(doc(db, "memos", memo.id), { aiComment: comment });
+            await render();
+            return;
+          }
+        }
+      }
+      alert("AI 코멘트 생성을 위해 Vercel에 배포하거나 유효한 Gemini API 키가 필요합니다.");
+      return;
+    }
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `서버 오류 (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (data.comment) {
+      // Firestore 문서에 AI 코멘트 필드 추가 저장
+      await updateDoc(doc(db, "memos", memo.id), {
+        aiComment: data.comment
+      });
+      await render();
+    }
+  } catch (error) {
+    console.error("AI 코멘트 생성 실패:", error);
+    alert("AI 코멘트 생성에 실패했습니다: " + error.message);
+  } finally {
+    if (buttonElement) {
+      buttonElement.disabled = false;
+      buttonElement.textContent = originalBtnText;
+    }
+  }
+}
+
+// 담벼락의 모든 메모에 대해 AI 코멘트 일괄 생성
+async function generateAllAiComments(btn) {
+  const memos = await loadMemos();
+  if (memos.length === 0) {
+    alert("담벼락에 메모가 없습니다.");
+    return;
+  }
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+
+  for (let i = 0; i < memos.length; i++) {
+    btn.textContent = `🤖 AI 코멘트 작성 중 (${i + 1}/${memos.length})...`;
+    await generateAiComment(memos[i]);
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+  alert("모든 메모에 AI 코멘트 작성이 완료되었습니다! ✨");
+}
+
+
+// ===================================================
 // 화면 그리기
 // ===================================================
 
@@ -141,6 +248,23 @@ function renderUserArea() {
     welcomeSpan.innerHTML = `👋 <strong>${currentUser.displayName || "사용자"}</strong>님 <span style="background:${isTeacher ? '#e3f2fd' : '#e8f5e9'}; color:${isTeacher ? '#0d47a1' : '#1b5e20'}; padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-left: 4px;">${isTeacher ? '교사 (teacher)' : '학생 (student)'}</span> `;
     welcomeSpan.style.marginRight = "10px";
     userArea.appendChild(welcomeSpan);
+
+    // 교사 전용: 전체 AI 코멘트 생성 버튼
+    if (isTeacher) {
+      const allAiBtn = document.createElement("button");
+      allAiBtn.textContent = "🤖 전체 AI 코멘트 생성";
+      allAiBtn.style.marginRight = "6px";
+      allAiBtn.style.fontSize = "12px";
+      allAiBtn.style.padding = "4px 8px";
+      allAiBtn.style.background = "#eef4ff";
+      allAiBtn.style.borderColor = "#90caf9";
+      allAiBtn.style.color = "#0d47a1";
+      allAiBtn.title = "담벼락에 있는 모든 메모에 AI 코멘트를 일괄 생성합니다";
+      allAiBtn.addEventListener("click", async function () {
+        await generateAllAiComments(allAiBtn);
+      });
+      userArea.appendChild(allAiBtn);
+    }
 
     // UID 복사 버튼 (규칙 및 TEACHER_UIDS 등록용)
     const copyUidBtn = document.createElement("button");
@@ -228,6 +352,7 @@ function makeMemo(memo) {
 
   if (canDelete) {
     const del = document.createElement("button");
+    del.className = "del-btn";
     del.textContent = "×";
     del.title = isTeacher && !isMyMemo ? "선생님 권한으로 삭제" : "메모 삭제";
     del.addEventListener("click", async function () {
@@ -253,6 +378,25 @@ function makeMemo(memo) {
     authorSpan.style.marginTop = "8px";
     authorSpan.style.textAlign = "right";
     div.appendChild(authorSpan);
+  }
+
+  // AI 코멘트가 있는 경우 말풍선 표시
+  if (memo.aiComment) {
+    const aiCommentBox = document.createElement("div");
+    aiCommentBox.className = "ai-comment";
+    aiCommentBox.innerHTML = `<div class="ai-comment-title">🤖 AI 선생님 코멘트</div><div>${memo.aiComment}</div>`;
+    div.appendChild(aiCommentBox);
+  }
+
+  // 교사(teacher)에게만 AI 코멘트 생성 버튼 노출
+  if (isTeacher) {
+    const aiBtn = document.createElement("button");
+    aiBtn.className = "ai-btn";
+    aiBtn.textContent = memo.aiComment ? "🤖 AI 코멘트 다시 달기" : "🤖 AI 코멘트 달기";
+    aiBtn.addEventListener("click", async function () {
+      await generateAiComment(memo, aiBtn);
+    });
+    div.appendChild(aiBtn);
   }
 
   return div;

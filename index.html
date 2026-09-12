@@ -20,9 +20,44 @@
     #writer textarea { width: 400px; font-size: 16px; }
 
     /* 메모가 붙는 담벼락 */
-    #wall { display: flex; flex-wrap: wrap; gap: 10px; }
-    .memo { border: 1px solid #ddd; background: #fffde7; padding: 10px; width: 200px; font-size: 15px; }
-    .memo button { float: right; }
+    #wall { display: flex; flex-wrap: wrap; gap: 12px; }
+    .memo { border: 1px solid #ddd; background: #fffde7; padding: 12px; width: 240px; font-size: 15px; border-radius: 6px; box-shadow: 1px 1px 4px rgba(0,0,0,0.05); word-break: break-word; }
+    .memo button.del-btn { float: right; border: none; background: transparent; font-size: 16px; cursor: pointer; color: #888; }
+    .memo button.del-btn:hover { color: #d32f2f; }
+
+    /* AI 코멘트 말풍선 */
+    .ai-comment {
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: #eef4ff;
+      border-left: 3px solid #1976d2;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #0d47a1;
+    }
+    .ai-comment-title {
+      font-weight: bold;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: #1565c0;
+    }
+
+    /* AI 코멘트 달기 버튼 */
+    .ai-btn {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 8px;
+      font-size: 12px;
+      background: #f0f4f8;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #1e293b;
+    }
+    .ai-btn:hover {
+      background: #e2e8f0;
+    }
   </style>
 </head>
 <body>
