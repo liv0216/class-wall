@@ -7,48 +7,66 @@
 // ===================================================
 
 
-// --- 메모 목록 ---
-// createdAt 은 메모를 쓴 시각(밀리초)입니다. 이 값으로 순서를 정합니다.
-let memos = [
-  { id: 1, text: "오늘 과학 시간에 한 실험이 재미있었다", createdAt: 1757030400000 },
-  { id: 2, text: "궁금한 점 - 물은 왜 100도에서 끓나요?", createdAt: 1757030500000 },
-  { id: 3, text: "모둠 친구들이 도와줘서 고마웠다", createdAt: 1757030600000 }
-];
+// Firebase SDK 모듈 불러오기 (CDN ES Module 방식)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  orderBy
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
-let nextId = 4;  // 새 메모에 붙일 번호
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: "AIzaSyC02tB4Cpc0ulT4udfDWtsQ5GZe4eBsfz4",
+  authDomain: "calss-wall.firebaseapp.com",
+  projectId: "calss-wall",
+  storageBucket: "calss-wall.firebasestorage.app",
+  messagingSenderId: "420622218957",
+  appId: "1:420622218957:web:5da15822a79b2961955b84"
+};
+
+// Firebase 및 Firestore 초기화
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 
 // ===================================================
-// 데이터를 다루는 함수 세 개
-// 백엔드 1 시간에 이 세 개가 Firestore를 쓰는 코드로 바뀝니다.
+// 데이터를 다루는 함수 세 개 (Firestore 연동)
 // ===================================================
 
 // 메모를 읽어 옵니다.
-// 백엔드 1: 여기가 Firestore에서 가져오는 코드로 바뀝니다.
-//           순서는 orderBy("createdAt") 으로 맞춥니다.
-function loadMemos() {
-  return memos.slice().sort(function (a, b) {
-    return a.createdAt - b.createdAt;
+// Firestore의 memos 컬렉션에서 올린 시각(createdAt) 순서대로 가져옵니다.
+async function loadMemos() {
+  const q = query(collection(db, "memos"), orderBy("createdAt", "asc"));
+  const snapshot = await getDocs(q);
+  const memoList = [];
+  snapshot.forEach(function (docSnap) {
+    memoList.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    });
   });
+  return memoList;
 }
 
 // 메모를 새로 씁니다.
-// 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
-function addMemo(text) {
-  memos.push({
-    id: nextId,
+// Firestore의 memos 컬렉션에 새 문서를 추가합니다.
+async function addMemo(text) {
+  await addDoc(collection(db, "memos"), {
     text: text,
     createdAt: Date.now()
   });
-  nextId = nextId + 1;
 }
 
 // 메모를 지웁니다.
-// 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
-function deleteMemo(id) {
-  memos = memos.filter(function (memo) {
-    return memo.id !== id;
-  });
+// Firestore의 memos 컬렉션에서 해당 ID의 문서를 삭제합니다.
+async function deleteMemo(id) {
+  await deleteDoc(doc(db, "memos", id));
 }
 
 
@@ -56,11 +74,12 @@ function deleteMemo(id) {
 // 화면 그리기
 // ===================================================
 
-function render() {
+async function render() {
   const wall = document.getElementById("wall");
   wall.innerHTML = "";
 
-  loadMemos().forEach(function (memo) {
+  const memoList = await loadMemos();
+  memoList.forEach(function (memo) {
     wall.appendChild(makeMemo(memo));
   });
 }
@@ -72,10 +91,10 @@ function makeMemo(memo) {
 
   const del = document.createElement("button");
   del.textContent = "×";
-  del.onclick = function () {
-    deleteMemo(memo.id);
-    render();
-  };
+  del.addEventListener("click", async function () {
+    await deleteMemo(memo.id);
+    await render();
+  });
   div.appendChild(del);
 
   const span = document.createElement("span");
@@ -93,18 +112,18 @@ function makeMemo(memo) {
 
 const input = document.getElementById("input");
 
-input.onkeydown = function (e) {
+input.addEventListener("keydown", async function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
 
     const text = input.value.trim();
     if (text === "") return;
 
-    addMemo(text);
+    await addMemo(text);
     input.value = "";
-    render();
+    await render();
   }
-};
+});
 
 
 // 첫 화면 그리기
