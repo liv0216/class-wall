@@ -560,44 +560,16 @@ function renderUserArea() {
 
     // 사용자 이름 및 역할 배지
     const welcomeSpan = document.createElement("span");
-    welcomeSpan.innerHTML = `👋 <strong>${currentUser.displayName || "사용자"}</strong>님 <span style="background:${isTeacher ? '#e3f2fd' : '#e8f5e9'}; color:${isTeacher ? '#0d47a1' : '#1b5e20'}; padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-left: 4px;">${isTeacher ? '교사 (teacher)' : '학생 (student)'}</span> `;
+    welcomeSpan.innerHTML = `👋 <strong>${currentUser.displayName || "사용자"}</strong>님 <span style="background:${isTeacher ? '#e3f2fd' : '#e8f5e9'}; color:${isTeacher ? '#0d47a1' : '#1b5e20'}; padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-left: 4px;">${isTeacher ? '선생님 🌟' : '학생'}</span> `;
     welcomeSpan.style.marginRight = "10px";
     userArea.appendChild(welcomeSpan);
-
-    // UID 복사 버튼 (규칙 및 TEACHER_UIDS 등록용)
-    const copyUidBtn = document.createElement("button");
-    copyUidBtn.textContent = "내 UID 복사";
-    copyUidBtn.style.marginRight = "6px";
-    copyUidBtn.style.fontSize = "12px";
-    copyUidBtn.style.padding = "4px 8px";
-    copyUidBtn.title = "현재 로그인된 계정의 Firebase UID를 클립보드에 복사합니다";
-    copyUidBtn.addEventListener("click", function () {
-      navigator.clipboard.writeText(currentUser.uid).then(function () {
-        alert("UID가 복사되었습니다:\n" + currentUser.uid + "\n\nfirestore.rules의 TEACHER_UID_HERE 자리에 붙여넣으실 수 있습니다.");
-      });
-    });
-    userArea.appendChild(copyUidBtn);
-
-    // 역할 전환 버튼 (실습 편의용: 교사/학생 즉시 테스트)
-    const toggleRoleBtn = document.createElement("button");
-    toggleRoleBtn.textContent = isTeacher ? "학생 모드로 변경" : "교사 모드로 변경";
-    toggleRoleBtn.style.marginRight = "6px";
-    toggleRoleBtn.style.fontSize = "12px";
-    toggleRoleBtn.style.padding = "4px 8px";
-    toggleRoleBtn.addEventListener("click", function () {
-      const nextRole = isTeacher ? "student" : "teacher";
-      localStorage.setItem("role_" + currentUser.uid, nextRole);
-      renderUserArea();
-      updateBoardHeaderUI();
-      render();
-    });
-    userArea.appendChild(toggleRoleBtn);
 
     // 로그아웃 버튼
     const logoutBtn = document.createElement("button");
     logoutBtn.textContent = "로그아웃";
     logoutBtn.style.fontSize = "12px";
-    logoutBtn.style.padding = "4px 8px";
+    logoutBtn.style.padding = "4px 10px";
+    logoutBtn.style.cursor = "pointer";
     logoutBtn.addEventListener("click", async function () {
       try {
         await signOut(auth);
