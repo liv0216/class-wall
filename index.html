@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Jua&display=swap" rel="stylesheet">
+  <!-- QR 코드 생성을 위한 경량 라이브러리 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     /* 전체 기본 설정 & 파스텔 모눈 격자 배경 */
     body {
@@ -822,6 +824,114 @@
       border-radius: 16px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
+
+    /* 보드 공유 버튼 */
+    .btn-share {
+      font-family: 'Jua', sans-serif;
+      background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%);
+      color: #1971c2;
+      border: 1.5px solid #74c0fc;
+      border-radius: 15px;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 6px rgba(51, 154, 240, 0.15);
+    }
+    .btn-share:hover {
+      background: #a5d8ff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(51, 154, 240, 0.25);
+    }
+
+    /* 학생용 단일 고정 보드 표시기 */
+    .student-board-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #ffffff;
+      border: 2px solid #ffd8a8;
+      border-radius: 16px;
+      padding: 6px 14px;
+      box-shadow: 0 2px 6px rgba(255, 146, 43, 0.12);
+    }
+    .student-board-badge {
+      background: #fff3bf;
+      color: #d9480f;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: bold;
+    }
+    .student-board-title {
+      color: #212529;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    /* 공유 모달 전용 스타일 */
+    .share-modal-box {
+      max-width: 460px;
+      text-align: center;
+      border-radius: 24px;
+    }
+    .share-qr-wrap {
+      background: #ffffff;
+      border: 2.5px dashed #74c0fc;
+      border-radius: 20px;
+      padding: 20px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      margin: 14px auto;
+      box-shadow: 0 8px 24px rgba(25, 113, 194, 0.08);
+      min-width: 200px;
+      min-height: 200px;
+    }
+    .share-url-row {
+      display: flex;
+      gap: 8px;
+      margin: 10px 0 16px 0;
+    }
+    .share-url-input {
+      flex: 1;
+      font-family: monospace, sans-serif;
+      font-size: 13px;
+      padding: 10px 14px;
+      border: 1.5px solid #ced4da;
+      border-radius: 12px;
+      background: #f8f9fa;
+      color: #495057;
+      outline: none;
+    }
+    .btn-copy-url {
+      font-family: 'Jua', sans-serif;
+      background: #339af0;
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-copy-url:hover {
+      background: #1c7ed6;
+    }
+    .share-notice-box {
+      background: #e7f5ff;
+      border: 1.5px solid #a5d8ff;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #1864ab;
+      line-height: 1.5;
+      text-align: left;
+    }
   </style>
 </head>
 <body>
@@ -830,14 +940,25 @@
 
     <!-- 보드 전환 및 정보 바 -->
     <div id="boardBar">
-      <div class="board-select-label">📋 보드:</div>
-      <select id="boardSelect">
-        <option value="default">기본 담벼락</option>
-      </select>
+      <!-- 교사용 보드 선택 컨트롤 (교사에게만 노출) -->
+      <div id="teacherBoardControls" style="display: none; align-items: center; gap: 8px;">
+        <div class="board-select-label">📋 보드:</div>
+        <select id="boardSelect">
+          <option value="default">기본 담벼락</option>
+        </select>
+      </div>
+
+      <!-- 학생용 단일 고정 보드 표시 (타 보드 전환 불가) -->
+      <div id="studentBoardIndicator" class="student-board-indicator" style="display: none;">
+        <span class="student-board-badge">📌 참여 중인 담벼락</span>
+        <span id="studentBoardTitle" class="student-board-title">기본 담벼락</span>
+      </div>
+
       <div id="boardBadges">
         <span id="boardLockBadge" class="badge badge-locked" style="display: none;">🔒 잠김</span>
       </div>
       <span id="boardDesc" class="board-desc">우리 반 공통 이야기 공간</span>
+      <button type="button" id="shareBoardBtn" class="btn-share" style="display: none;" title="학생들에게 QR코드 또는 URL 링크 공유">🔗 학생 공유 (QR/링크)</button>
       <button id="openDashboardBtn" class="btn-dashboard" style="display: none;">📊 교사 대시보드</button>
     </div>
 
@@ -948,6 +1069,38 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 학생용 보드 공유(QR코드 & 링크) 모달 -->
+  <div id="shareModal" class="modal-overlay" style="display: none;">
+    <div class="modal-box share-modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">📲 학생들에게 담벼락 공유하기</h3>
+        <button type="button" id="closeShareBtn" class="modal-close-btn">×</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px;">
+        <div id="shareBoardTitle" style="font-size: 20px; color: #1971c2; font-weight: bold; margin-bottom: 4px;">기본 담벼락</div>
+        <div id="shareBoardDesc" style="font-size: 14px; color: #868e96; margin-bottom: 12px;">우리 반 공통 이야기 공간</div>
+
+        <!-- QR 코드 표시 영역 -->
+        <div class="share-qr-wrap">
+          <div id="qrcodeBox"></div>
+        </div>
+        <p style="font-size: 13px; color: #495057; margin: 4px 0 14px 0;">📱 태블릿이나 스마트폰 기본 카메라로 비추면 바로 열려요!</p>
+
+        <!-- URL 복사 영역 -->
+        <div class="share-url-row">
+          <input type="text" id="shareUrlInput" class="share-url-input" readonly>
+          <button type="button" id="btnCopyUrl" class="btn-copy-url">📋 링크 복사</button>
+        </div>
+
+        <!-- 학생 보드 격리 안내문 -->
+        <div class="share-notice-box">
+          🔒 <strong>학생 보드 격리 보호 중</strong><br>
+          학생들이 위 QR 코드나 링크로 접속하면 <strong>선생님이 공유해 주신 이 담벼락에만 고정되어 참여</strong>하며, 다른 보드로 임의 이동하거나 다른 보드 목록을 열람할 수 없습니다.
         </div>
       </div>
     </div>

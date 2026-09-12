@@ -82,7 +82,11 @@ function getUserRole(user) {
 // 보드(Board) 상태 및 관리
 // ===================================================
 
-let currentBoardId = localStorage.getItem("current_board_id") || "default";
+// URL 파라미터에서 공유된 보드 ID 확인 (?board=보드ID 또는 ?b=보드ID)
+const urlParams = new URLSearchParams(window.location.search);
+const sharedBoardFromUrl = urlParams.get("board") || urlParams.get("b");
+
+let currentBoardId = sharedBoardFromUrl || localStorage.getItem("current_board_id") || "default";
 let currentBoard = null;
 let boardsList = [];
 
@@ -118,7 +122,13 @@ async function loadBoards() {
     }
 
     boardsList = list;
-    currentBoard = boardsList.find(b => b.id === currentBoardId) || boardsList[0] || defaultBoard;
+
+    // URL 공유 링크로 들어온 경우 해당 보드를 최우선 선택
+    if (sharedBoardFromUrl) {
+      currentBoard = boardsList.find(b => b.id === sharedBoardFromUrl) || boardsList[0] || defaultBoard;
+    } else {
+      currentBoard = boardsList.find(b => b.id === currentBoardId) || boardsList[0] || defaultBoard;
+    }
     currentBoardId = currentBoard.id;
     localStorage.setItem("current_board_id", currentBoardId);
 
@@ -408,7 +418,7 @@ async function deleteMemo(id) {
 // UI 보조 함수: 보드 헤더 및 첨부파일 미리보기
 // ===================================================
 
-// 상단 보드 바 UI 갱신 (선택 드롭다운, 배지, 잠금 상태 반영)
+// 상단 보드 바 UI 갱신 (선택 드롭다운, 배지, 잠금 상태, 교사/학생 보드 격리 반영)
 function updateBoardHeaderUI() {
   const boardSelect = document.getElementById("boardSelect");
   const boardDesc = document.getElementById("boardDesc");
@@ -420,29 +430,48 @@ function updateBoardHeaderUI() {
   const attachFileBtn = document.getElementById("btnAttachFile");
   const submitBtn = document.getElementById("btnSubmitMemo");
 
+  const teacherControls = document.getElementById("teacherBoardControls");
+  const studentIndicator = document.getElementById("studentBoardIndicator");
+  const studentTitle = document.getElementById("studentBoardTitle");
+  const shareBoardBtn = document.getElementById("shareBoardBtn");
+
   if (!boardSelect) return;
 
-  // 보드 드롭다운 옵션 채우기
-  boardSelect.innerHTML = "";
-  boardsList.forEach(b => {
-    const opt = document.createElement("option");
-    opt.value = b.id;
-    opt.textContent = (b.isLocked ? "🔒 " : "📌 ") + b.title;
-    if (b.id === currentBoardId) opt.selected = true;
-    boardSelect.appendChild(opt);
-  });
+  const role = currentUser ? getUserRole(currentUser) : null;
+  const isTeacher = role === "teacher";
+
+  // 교사와 학생 화면 분기 (학생의 타 보드 접근 차단 & 단일 보드 고정 격리)
+  if (isTeacher) {
+    // 1) 교사: 전체 보드 전환 드롭다운 활성화 및 공유/대시보드 버튼 노출
+    if (teacherControls) teacherControls.style.display = "inline-flex";
+    if (studentIndicator) studentIndicator.style.display = "none";
+    if (shareBoardBtn) shareBoardBtn.style.display = "inline-flex";
+    if (openDashboardBtn) openDashboardBtn.style.display = "inline-flex";
+
+    // 보드 드롭다운 옵션 채우기
+    boardSelect.innerHTML = "";
+    boardsList.forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b.id;
+      opt.textContent = (b.isLocked ? "🔒 " : "📌 ") + b.title;
+      if (b.id === currentBoardId) opt.selected = true;
+      boardSelect.appendChild(opt);
+    });
+  } else {
+    // 2) 학생: 다른 보드로의 전환 원천 차단 (드롭다운 숨김, 공유받은 보드 고정 배지 노출)
+    if (teacherControls) teacherControls.style.display = "none";
+    if (studentIndicator) {
+      studentIndicator.style.display = "inline-flex";
+      if (studentTitle) {
+        studentTitle.textContent = currentBoard ? currentBoard.title : "기본 담벼락";
+      }
+    }
+    // 학생에게는 공유 버튼 및 대시보드 버튼 숨김
+    if (shareBoardBtn) shareBoardBtn.style.display = "none";
+    if (openDashboardBtn) openDashboardBtn.style.display = "none";
+  }
 
   if (currentBoard) {
-    if (boardDesc) boardDesc.textContent = currentBoard.description || "";
-    if (lockBadge) lockBadge.style.display = currentBoard.isLocked ? "inline-flex" : "none";
-
-    const role = currentUser ? getUserRole(currentUser) : null;
-    const isTeacher = role === "teacher";
-
-    // 교사 대시보드 버튼 표시 여부
-    if (openDashboardBtn) {
-      openDashboardBtn.style.display = isTeacher ? "inline-flex" : "none";
-    }
 
     // 잠금 상태일 때 학생 글쓰기 비활성화
     const shouldLock = currentBoard.isLocked && !isTeacher;
@@ -856,6 +885,18 @@ async function renderBoardListInDashboard() {
     });
     actions.appendChild(lockBtn);
 
+    // 학생 공유 (QR / 링크) 버튼
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "btn-action-small";
+    shareBtn.style.color = "#1971c2";
+    shareBtn.style.borderColor = "#74c0fc";
+    shareBtn.textContent = "🔗 학생 공유 (QR/링크)";
+    shareBtn.title = "학생들에게 이 보드의 접속 QR코드와 링크를 안내합니다";
+    shareBtn.addEventListener("click", () => {
+      openShareModal(b.id);
+    });
+    actions.appendChild(shareBtn);
+
     // 삭제 버튼 (기본 보드는 삭제 불가)
     if (b.id !== "default") {
       const delBtn = document.createElement("button");
@@ -953,6 +994,78 @@ async function renderAnalyticsInDashboard() {
         tbody.appendChild(tr);
       });
     }
+  }
+}
+
+// ===================================================
+// 보드 공유 (QR 코드 및 링크) 기능
+// ===================================================
+
+// QR 코드 및 링크 공유 모달 열기
+function openShareModal(targetBoardId = null) {
+  const bId = targetBoardId || currentBoardId;
+  const board = boardsList.find(b => b.id === bId) || currentBoard;
+  if (!board) return;
+
+  const modal = document.getElementById("shareModal");
+  const titleEl = document.getElementById("shareBoardTitle");
+  const descEl = document.getElementById("shareBoardDesc");
+  const urlInput = document.getElementById("shareUrlInput");
+  const qrBox = document.getElementById("qrcodeBox");
+
+  if (titleEl) titleEl.textContent = board.title;
+  if (descEl) descEl.textContent = board.description || "우리 반 공통 이야기 공간";
+
+  // 현재 브라우저 주소 기반 공유 URL 생성 (?board=보드ID)
+  const baseUrl = window.location.origin + window.location.pathname;
+  const shareUrl = `${baseUrl}?board=${encodeURIComponent(board.id)}`;
+  if (urlInput) urlInput.value = shareUrl;
+
+  // QR 코드 동적 렌더링
+  if (qrBox) {
+    qrBox.innerHTML = "";
+    if (typeof QRCode !== "undefined") {
+      try {
+        new QRCode(qrBox, {
+          text: shareUrl,
+          width: 190,
+          height: 190,
+          colorDark: "#212529",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch (e) {
+        console.warn("QRCode 라이브러리 실행 오류, 이미지 폴백 적용:", e);
+        renderQrFallback(qrBox, shareUrl);
+      }
+    } else {
+      renderQrFallback(qrBox, shareUrl);
+    }
+  }
+
+  if (modal) modal.style.display = "flex";
+}
+
+// QR 코드 생성 실패 또는 오프라인/지연 시 이미지 폴백 제공
+function renderQrFallback(container, url) {
+  container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodeURIComponent(url)}" alt="QR 코드" style="width:190px; height:190px; border-radius:12px; display:block;">`;
+}
+
+// 링크 클립보드 복사 처리
+async function handleCopyShareUrl() {
+  const urlInput = document.getElementById("shareUrlInput");
+  if (!urlInput) return;
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(urlInput.value);
+    } else {
+      urlInput.select();
+      document.execCommand("copy");
+    }
+    alert("담벼락 참여 링크가 복사되었습니다! 🎉\n학생들에게 링크를 안내해 주세요.");
+  } catch (err) {
+    prompt("아래 링크를 복사하여 학생들에게 공유하세요:", urlInput.value);
   }
 }
 
@@ -1108,6 +1221,33 @@ if (createBoardBtn) {
     await render();
   });
 }
+
+// 보드 공유 모달 열기 및 닫기, 링크 복사 리스너
+const shareBoardBtn = document.getElementById("shareBoardBtn");
+const closeShareBtn = document.getElementById("closeShareBtn");
+const shareModal = document.getElementById("shareModal");
+const btnCopyUrl = document.getElementById("btnCopyUrl");
+
+if (shareBoardBtn) {
+  shareBoardBtn.addEventListener("click", () => openShareModal());
+}
+if (closeShareBtn && shareModal) {
+  closeShareBtn.addEventListener("click", () => {
+    shareModal.style.display = "none";
+  });
+}
+if (shareModal) {
+  shareModal.addEventListener("click", (e) => {
+    if (e.target === shareModal) shareModal.style.display = "none";
+  });
+}
+if (btnCopyUrl) {
+  btnCopyUrl.addEventListener("click", handleCopyShareUrl);
+}
+
+// 전역 호출 지원
+window.openShareModal = openShareModal;
+window.openTeacherDashboard = openTeacherDashboard;
 
 // ===================================================
 // 인증 상태 변경 감지 및 초기화
