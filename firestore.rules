@@ -23,30 +23,34 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // 1. [담벼락 보드 컬렉션]
+    match /boards/{boardId} {
+      // 누구나 보드 정보(이름, 잠금 상태 등)를 읽을 수 있습니다.
+      allow read: if true;
+      // 보드 생성, 수정(잠금 토글 설정 등), 삭제는 교사만 가능합니다.
+      allow write: if isTeacher();
+    }
+
+    // 2. [메모 컬렉션]
     match /memos/{memoId} {
-      // 1. [읽기] 누구나 담벼락의 메모를 볼 수 있습니다.
+      // [읽기] 누구나 담벼락의 메모를 볼 수 있습니다.
       allow read: if true;
 
-      // 2. [생성]
-      // - 교사: 모든 메모 생성 가능
-      // - 학생: 오직 본인의 UID로만 생성 가능 (5글자 이상 필수)
+      // [생성] 로그인한 사용자(학생은 본인 UID 명시, 5글자 이상)
       allow create: if request.auth != null
                     && request.resource.data.text is string
                     && request.resource.data.text.size() >= 5
                     && (isTeacher() || (isStudent() && request.resource.data.uid == request.auth.uid));
 
-      // 3. [삭제]
-      // - 교사(teacher): 모든 메모를 삭제할 수 있는 전권 부여
-      // - 학생(student): 타인의 메모는 건들 수 없고, 본인 메모만 삭제 가능
+      // [삭제] 교사는 모든 메모 삭제 가능, 학생은 본인이 쓴 메모만 삭제 가능
       allow delete: if isTeacher()
                     || (request.auth != null && (resource.data.uid == request.auth.uid || !('uid' in resource.data)));
 
-      // 4. [수정]
-      // - 교사만 수정 가능하며, 학생은 타인의 것은 건들지 못합니다.
-      allow update: if isTeacher();
+      // [수정] 교사는 전권 수정 가능, 학생은 반응(이모지) 및 댓글 참여를 위해 수정 가능
+      allow update: if isTeacher() || request.auth != null;
     }
 
-    // 사용자 역할/정보 저장 컬렉션
+    // 3. [사용자 역할/정보 저장 컬렉션]
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if isTeacher() || (request.auth != null && request.auth.uid == userId);
