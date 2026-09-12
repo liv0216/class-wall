@@ -2,17 +2,52 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // [교사(teacher) 확인 함수]
+    // 1) 아래 배열에 선생님의 Firebase UID를 입력하거나
+    // 2) users 컬렉션에 role이 'teacher'로 등록된 경우 교사 권한을 부여합니다.
+    function isTeacher() {
+      return request.auth != null && (
+        request.auth.uid in [
+          'TEACHER_UID_HERE' // 👈 [내 UID 복사] 버튼으로 복사한 본인 UID를 여기에 붙여넣으세요.
+        ]
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
+      );
+    }
+
+    // [학생(student) 확인 함수]
+    function isStudent() {
+      return request.auth != null;
+    }
+
     match /memos/{memoId} {
-      // 누구나 담벼락의 메모를 읽을 수 있습니다.
+      // 1. [읽기] 누구나 담벼락의 메모를 볼 수 있습니다.
       allow read: if true;
 
-      // 로그인한 사용자만 5글자 이상의 메모를 쓸 수 있습니다.
+      // 2. [생성]
+      // - 교사: 언제든 메모 생성 가능
+      // - 학생: 오직 본인의 UID로만 생성 가능 (5글자 이상 필수)
       allow create: if request.auth != null
                     && request.resource.data.text is string
-                    && request.resource.data.text.size() >= 5;
+                    && request.resource.data.text.size() >= 5
+                    && (isTeacher() || (isStudent() && request.resource.data.uid == request.auth.uid));
 
-      // 본인이 작성한 메모이거나, 이전 테스트 메모(uid 필드가 없는 경우)만 삭제할 수 있습니다.
-      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      // 3. [삭제]
+      // - 교사(teacher): 모든 메모를 삭제할 수 있는 전권 부여
+      // - 학생(student): 타인의 메모는 건들 수 없고, 본인 메모만 삭제 가능
+      allow delete: if isTeacher()
+                    || (request.auth != null && (resource.data.uid == request.auth.uid || !('uid' in resource.data)));
+
+      // 4. [수정]
+      // - 교사만 수정 가능하며, 학생은 타인의 것은 건들지 못합니다.
+      allow update: if isTeacher();
+    }
+
+    // 사용자 역할/정보 저장 컬렉션
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if isTeacher() || (request.auth != null && request.auth.uid == userId);
     }
   }
 }

@@ -46,6 +46,27 @@ const provider = new GoogleAuthProvider();
 // 현재 로그인한 사용자 정보 (로그인 안 됨: null)
 let currentUser = null;
 
+// ===================================================
+// 사용자 역할(teacher / student) 관리
+// ===================================================
+
+// 교사(teacher)로 지정할 UID 목록
+// 본인의 Firebase UID를 이 배열에 넣으면 교사 권한이 부여됩니다.
+const TEACHER_UIDS = [
+  // 예: "본인의_UID_여기에_붙여넣기"
+];
+
+// 현재 사용자의 역할을 반환합니다 ("teacher" 또는 "student")
+function getUserRole(user) {
+  if (!user) return null;
+  // 1) TEACHER_UIDS 목록에 포함되어 있거나
+  // 2) 로컬 스토리지에 교사 권한이 설정되어 있는 경우
+  if (TEACHER_UIDS.includes(user.uid) || localStorage.getItem("role_" + user.uid) === "teacher") {
+    return "teacher";
+  }
+  return "student";
+}
+
 
 // ===================================================
 // 데이터를 다루는 함수 세 개 (Firestore 연동)
@@ -67,7 +88,7 @@ async function loadMemos() {
 }
 
 // 메모를 새로 씁니다.
-// Firestore의 memos 컬렉션에 새 문서를 추가합니다 (5글자 이상, 로그인 사용자 정보 포함).
+// Firestore의 memos 컬렉션에 새 문서를 추가합니다 (5글자 이상, 로그인 사용자 정보 및 역할 포함).
 async function addMemo(text) {
   if (!currentUser) {
     alert("로그인 후 메모를 쓸 수 있습니다.");
@@ -79,11 +100,14 @@ async function addMemo(text) {
     return;
   }
 
+  const role = getUserRole(currentUser);
+
   await addDoc(collection(db, "memos"), {
     text: text,
     createdAt: Date.now(),
     uid: currentUser.uid,
-    author: currentUser.displayName || "사용자"
+    author: currentUser.displayName || (role === "teacher" ? "선생님" : "학생"),
+    role: role
   });
 }
 
@@ -104,14 +128,48 @@ function renderUserArea() {
   userArea.innerHTML = "";
 
   if (currentUser) {
-    // 로그인 상태: 사용자 이름과 로그아웃 버튼
-    const welcomeText = document.createElement("span");
-    welcomeText.textContent = `👋 ${(currentUser.displayName || "사용자")}님으로 로그인 중 `;
-    welcomeText.style.marginRight = "10px";
-    userArea.appendChild(welcomeText);
+    const role = getUserRole(currentUser);
+    const isTeacher = role === "teacher";
 
+    // 사용자 이름 및 역할 배지
+    const welcomeSpan = document.createElement("span");
+    welcomeSpan.innerHTML = `👋 <strong>${currentUser.displayName || "사용자"}</strong>님 <span style="background:${isTeacher ? '#e3f2fd' : '#e8f5e9'}; color:${isTeacher ? '#0d47a1' : '#1b5e20'}; padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-left: 4px;">${isTeacher ? '교사 (teacher)' : '학생 (student)'}</span> `;
+    welcomeSpan.style.marginRight = "10px";
+    userArea.appendChild(welcomeSpan);
+
+    // UID 복사 버튼 (규칙 및 TEACHER_UIDS 등록용)
+    const copyUidBtn = document.createElement("button");
+    copyUidBtn.textContent = "내 UID 복사";
+    copyUidBtn.style.marginRight = "6px";
+    copyUidBtn.style.fontSize = "12px";
+    copyUidBtn.style.padding = "4px 8px";
+    copyUidBtn.title = "현재 로그인된 계정의 Firebase UID를 클립보드에 복사합니다";
+    copyUidBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(currentUser.uid).then(function () {
+        alert("UID가 복사되었습니다:\n" + currentUser.uid + "\n\nfirestore.rules의 TEACHER_UID_HERE 자리에 붙여넣으실 수 있습니다.");
+      });
+    });
+    userArea.appendChild(copyUidBtn);
+
+    // 역할 전환 버튼 (실습 편의용: 교사/학생 즉시 테스트)
+    const toggleRoleBtn = document.createElement("button");
+    toggleRoleBtn.textContent = isTeacher ? "학생 모드로 변경" : "교사 모드로 변경";
+    toggleRoleBtn.style.marginRight = "6px";
+    toggleRoleBtn.style.fontSize = "12px";
+    toggleRoleBtn.style.padding = "4px 8px";
+    toggleRoleBtn.addEventListener("click", function () {
+      const nextRole = isTeacher ? "student" : "teacher";
+      localStorage.setItem("role_" + currentUser.uid, nextRole);
+      renderUserArea();
+      render();
+    });
+    userArea.appendChild(toggleRoleBtn);
+
+    // 로그아웃 버튼
     const logoutBtn = document.createElement("button");
     logoutBtn.textContent = "로그아웃";
+    logoutBtn.style.fontSize = "12px";
+    logoutBtn.style.padding = "4px 8px";
     logoutBtn.addEventListener("click", async function () {
       try {
         await signOut(auth);
@@ -153,17 +211,25 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
-  // 삭제 버튼: 내가 쓴 메모이거나 작성자 정보가 없는 기존 메모일 때만 표시
+  const role = currentUser ? getUserRole(currentUser) : null;
+  const isTeacher = role === "teacher";
   const isMyMemo = currentUser && memo.uid === currentUser.uid;
-  const isLegacyMemo = !memo.uid;
 
-  if (isMyMemo || isLegacyMemo) {
+  // 삭제 권한:
+  // - 교사(teacher): 모든 권한(모든 메모 삭제 가능)
+  // - 학생(student): 본인이 작성한 메모만 삭제 가능 (타인의 메모는 건들 수 없음)
+  // - 작성자 없는 기존 메모: 삭제 허용
+  const canDelete = isTeacher || isMyMemo || !memo.uid;
+
+  if (canDelete) {
     const del = document.createElement("button");
     del.textContent = "×";
-    del.title = "메모 삭제";
+    del.title = isTeacher && !isMyMemo ? "선생님 권한으로 삭제" : "메모 삭제";
     del.addEventListener("click", async function () {
-      await deleteMemo(memo.id);
-      await render();
+      if (confirm("이 메모를 삭제하시겠습니까?")) {
+        await deleteMemo(memo.id);
+        await render();
+      }
     });
     div.appendChild(del);
   }
@@ -172,10 +238,11 @@ function makeMemo(memo) {
   span.textContent = memo.text;
   div.appendChild(span);
 
-  // 작성자가 있으면 메모 하단에 작게 표시
+  // 작성자 및 역할 표기
   if (memo.author) {
     const authorSpan = document.createElement("div");
-    authorSpan.textContent = memo.author;
+    const isMemoTeacher = memo.role === "teacher";
+    authorSpan.innerHTML = `${memo.author} ${isMemoTeacher ? '<span style="color:#0d47a1; font-weight:bold;">[선생님]</span>' : ''}`;
     authorSpan.style.fontSize = "12px";
     authorSpan.style.color = "#777";
     authorSpan.style.marginTop = "8px";
@@ -195,7 +262,9 @@ function makeMemo(memo) {
 const input = document.getElementById("input");
 
 input.addEventListener("keydown", async function (e) {
+  // 엔터 키를 눌렀을 때 메모 추가 (Shift + Enter는 줄바꿈, 한글 조합 중 제외)
   if (e.key === "Enter" && !e.shiftKey) {
+    if (e.isComposing) return; // 한글 끝 글자 중복 입력 방지
     e.preventDefault();
 
     if (!currentUser) {
@@ -230,7 +299,8 @@ onAuthStateChanged(auth, function (user) {
   render();
 
   if (currentUser) {
-    input.placeholder = "메모를 쓰고 엔터 (5글자 이상)";
+    const role = getUserRole(currentUser);
+    input.placeholder = `${role === "teacher" ? "[교사]" : "[학생]"} 메모를 쓰고 엔터 (5글자 이상)`;
   } else {
     input.placeholder = "로그인 후 메모를 쓸 수 있습니다";
   }
